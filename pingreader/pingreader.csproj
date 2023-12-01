@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>False</SelfContained>
+    <RuntimeIdentifiers>win-x64;linux-x64;osx.10.12-x64;osx.12-x64;osx.12-arm64</RuntimeIdentifiers>
+    <PublishReadyToRunShowWarnings>true</PublishReadyToRunShowWarnings>
+    <NoWarn>1591</NoWarn>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine.DragonFruit" Version="0.4.0-alpha.22272.1"></PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="7.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="7.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PingExcelReader\PingExcelReader.csproj"></ProjectReference>
+  </ItemGroup>
+</Project>

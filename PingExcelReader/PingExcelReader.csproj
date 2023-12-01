@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <SelfContained>False</SelfContained>
+    <RuntimeIdentifiers>win-x64;linux-x64;osx.10.12-x64;osx.12-x64;osx.12-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- <PackageReference Include="ExcelNumberFormat"></PackageReference>
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.0.0"></PackageReference>
+    <PackageReference Include="DocumentFormat.OpenXml.Linq" Version="3.0.0"></PackageReference> -->
+    <!-- <PackageReference Include="ClosedXML" Version="0.102.1"></PackageReference> -->
+    <ProjectReference Include="..\..\..\ClosedXML\ClosedXML\ClosedXML.csproj"></ProjectReference>
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="7.0.0" />
+  </ItemGroup>
+</Project>
