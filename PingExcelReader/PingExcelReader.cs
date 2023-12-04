@@ -11,43 +11,10 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DocumentFormat.OpenXml.Drawing;
 
 namespace PingExcelReader
 {
-    using Currency = System.Decimal;
-
-    public class Layer
-    {
-        public string layer_name { get; set; }
-        public Currency limit { get; set; }
-        public Currency attachment { get; set; }
-        public Currency premium { get; set; }
-    }
-
-
-    public class PolicyTerms
-    {
-
-        public List<Layer> layers { get; set; }
-    }
-
-
-    internal class PingExcelMetadata
-    {
-        public string ClientName;
-        public string Timestamp;
-        //public string Token; 
-        public string SOVID;
-        // public string Version;
-        // public string FileFormat;
-        public string Name;
-        // public string CodeName;
-        public string FullName;
-        public string DocumentType;
-        // public string UserInfo;
-    }
-
-
     public class PingExcelReader
     {
         public static PingExcelReader Read(FileInfo infile, ILoggerFactory loggerFactory = null)
@@ -114,6 +81,12 @@ namespace PingExcelReader
             {
                 if (m_metadata == null)
                 {
+                    var customProperties = new Dictionary<string, string>();
+                    foreach (var prop in reader.CustomProperties)
+                    {
+                        customProperties.Add(prop.Name, prop.Value);
+                    }
+
                     m_metadata = new PingExcelMetadata
                     {
                         ClientName = reader.GetCustomDocumentPropertyOrDefault("Ping Client Name", "n/a"),
@@ -121,7 +94,10 @@ namespace PingExcelReader
                         SOVID = reader.GetCustomDocumentPropertyOrDefault("Ping Identifier", "n/a"),
                         FullName = m_infile.FullName,
                         Name = m_infile.Name,
-                        DocumentType = "SOV"
+                        DocumentType = "SOV",
+                        PingPolicyTermsVersion = reader.GetCustomDocumentPropertyOrDefault("Ping Policy Terms Version", null),
+                        PingFormatName = reader.GetCustomDocumentPropertyOrDefault("Ping Format Name", null),
+                        Properties = customProperties
                     };
                 }
 
@@ -133,18 +109,90 @@ namespace PingExcelReader
         {
             get
             {
+                var version = Metadata.PingPolicyTermsVersion;
+                if (string.IsNullOrEmpty(version))
+                    return null;
+
+                if (!version.StartsWith("v"))
+                    throw new Exception("Invalid Ping Policy Terms Version: " + version);
+
+                var parsedVersionString = version.Substring(1).Split('.').Select(s => int.Parse(s)).ToArray();
+                if (parsedVersionString[0] < 4)
+                {
+                    throw new Exception("Invalid Ping Policy Terms Version, currently only support v4+: " + version);
+                }
+
+                if (!reader.HasNamedRange("p_L1PL"))
+                {
+                    throw new Exception("Invalid Ping Policy Terms Version, no p_L1PL defined name found: " + version);
+                }
+
+                var pingFormatName = Metadata.PingFormatName;
+
+                var layerTerms = new List<LayerTerms>();
+
+                int layerCounter = 1;
+                while (true)
+                {
+                    var participation = reader.GetCellValue($"p_L{layerCounter}PL");
+                    if (string.IsNullOrEmpty(participation)) break;
+
+                    if (layer == null) break;
+
+                    layerTerms.Add(new LayerTerms()
+                    {
+                        name = layer["Layer Name"],
+                        limit = layer["Layer Limit"],
+                        attachment = layer["Layer Attachment"],
+                        premium = layer["Layer Premium"]
+                    });
+                }
+
                 return new PolicyTerms()
                 {
-                    layers = new List<Layer>()
+
+
+                    layer_terms = new List<LayerTerms>()
                     {
-                        new Layer()
+                        new LayerTerms()
                         {
-                            layer_name = "Layer 1",
+                            name = "Layer 1",
                             limit = 1000000,
                             attachment = 0,
                             premium = 1000000
                         }
-                    }
+                    },
+                    peril_terms = new List<PerilTerms>()
+                    {
+                        new PerilTerms()
+                        {
+                            type = "Wind",
+                            subperil_group = "Wind",
+                            sublimit = 1000000,
+                            min_deductible = 0,
+                            max_deductible = 1000000,
+                            deductible_type = "Flat",
+                            per_location_deductible_type = "Flat",
+                            per_location_deductible = 1000000,
+                            bi_days_deductible = 0
+                        }
+                    },
+                    zone_terms = new List<ZoneTerms>()
+                    {
+                        new ZoneTerms()
+                        {
+                            peril_type = "Wind",
+                            zone = "Zone 1",
+                            sublimit = 1000000,
+                            min_deductible = 0,
+                            max_deductible = 1000000,
+                            deductible_type = "Flat",
+                            per_location_deductible_type = "Flat",
+                            per_location_deductible = 1000000,
+                            is_excluded = false
+                        }
+                    },
+
                 };
             }
         }

@@ -9,10 +9,10 @@ var pingData = PingExcelReader.PingExcelReader.Read(new FileInfo("scrubber.xlsx"
 pingData.WritePingJson(outfile);
 ```
 
-Alternatively, data can be accessed directly from the PingExcelReader object via lazy-loaded properties such as 
+Alternatively, data can be accessed directly from the PingExcelReader object via lazy-loaded properties such as `pingData.extraData` or `pingData.buildings`.
 
 
-## To test:
+## To compile and test with the console app:
 ```
 cd pingreader
 dotnet run --infile <path to Ping-generated Excel file>
