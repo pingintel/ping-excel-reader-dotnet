@@ -23,7 +23,9 @@ namespace pingreader
 
             ILogger logger = loggerFactory.CreateLogger("pingreader");
             logger.LogInformation("pingreader: Processing {infile}", infile.FullName);
+
             var pingData = PingExcelReader.PingExcelReader.Read(infile, loggerFactory);
+
             logger.LogInformation("SOVID: {SOVID}", pingData.id);
             var information = pingData.extra_data;
             if (information.TryGetValue("Named Insured", out dynamic? quoteCode))

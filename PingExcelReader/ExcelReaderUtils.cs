@@ -88,6 +88,14 @@ namespace PingExcelReader
             "ping_pli_url"
         };
 
+        public Dictionary<string, dynamic> CustomProperties
+        {
+            get
+            {
+                return this.workbook.CustomProperties.ToDictionary(p => p.Name, p => p.Value);
+            }
+        }
+
         public List<Dictionary<string, dynamic>> ReadItemsTable(string tableName)
         {
             var columnSpecs = this.ReadReferenceTable($"r_{tableName}_column_specification");
@@ -237,6 +245,11 @@ namespace PingExcelReader
             {
                 return defaultValue;
             }
+        }
+
+        internal bool HasNamedRange(string definedName)
+        {
+            return this.workbook.NamedRange(definedName) != null;
         }
     }
 }
