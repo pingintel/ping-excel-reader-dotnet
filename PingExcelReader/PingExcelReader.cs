@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DocumentFormat.OpenXml.Drawing;
+using DocumentFormat.OpenXml.Math;
 
 namespace PingExcelReader
 {
@@ -51,7 +52,17 @@ namespace PingExcelReader
         {
             get
             {
-                var range = reader.ReadReferenceTable("p_extra_data_fields");
+                List<Dictionary<string, string>> range;
+                try
+                {
+                    range = reader.ReadReferenceTable("p_extra_data_fields");
+                }
+                catch (ArgumentException)
+                {
+                    m_logger?.LogWarning("Cannot find p_extra_data_fields");
+                    return new Dictionary<string, dynamic>();
+                }
+
                 var ret = new Dictionary<string, dynamic>();
 
                 foreach (var row in range)
@@ -81,10 +92,10 @@ namespace PingExcelReader
             {
                 if (m_metadata == null)
                 {
-                    var customProperties = new Dictionary<string, string>();
+                    var customProperties = new Dictionary<string, dynamic>();
                     foreach (var prop in reader.CustomProperties)
                     {
-                        customProperties.Add(prop.Name, prop.Value);
+                        customProperties.Add(prop.Key, prop.Value);
                     }
 
                     m_metadata = new PingExcelMetadata
@@ -129,70 +140,60 @@ namespace PingExcelReader
 
                 var pingFormatName = Metadata.PingFormatName;
 
-                var layerTerms = new List<LayerTerms>();
+                var allLayerTerms = new List<LayerTerms>();
 
                 int layerCounter = 1;
-                while (true)
+                while (layerCounter < 1000)
                 {
-                    var participation = reader.GetCellValue($"p_L{layerCounter}PL");
-                    if (string.IsNullOrEmpty(participation)) break;
-
-                    if (layer == null) break;
-
-                    layerTerms.Add(new LayerTerms()
+                    try
                     {
-                        name = layer["Layer Name"],
-                        limit = layer["Layer Limit"],
-                        attachment = layer["Layer Attachment"],
-                        premium = layer["Layer Premium"]
-                    });
+                        if (!reader.HasNamedRange($"p_L{layerCounter}PL"))
+                            break;
+
+                        dynamic participation;
+                        try
+                        {
+                            participation = Convert.ToInt64(reader.GetCellValue($"p_L{layerCounter}PL"));
+                            if (participation == null || participation == 0)
+                                continue;
+                        }
+                        catch (Exception)
+                        {
+                            continue;
+                        }
+
+                        var layerTerms = new LayerTerms();
+                        layerTerms.participation = participation;
+                        layerTerms.attachment = Convert.ToInt64(reader.GetCellValue($"p_L{layerCounter}AP")) ?? 0;
+                        var limit = reader.GetCellValue($"p_L{layerCounter}LL");
+                        // decide if limit (which is dynamic) is set or not
+                        if (limit != null && limit >= 0)
+                        {
+                            layerTerms.limit = Convert.ToInt64(limit);
+                        }
+                        else
+                        {
+                            var participation_pct = reader.GetCellValue($"p_L{layerCounter}PP");
+                            if (participation_pct == null)
+                                participation_pct = 1.0;
+                            else
+                                participation_pct = Convert.ToDouble(participation_pct);
+                            layerTerms.limit = (long?)Math.Round(Convert.ToDouble(layerTerms.participation) / participation_pct);
+                        }
+
+                        allLayerTerms.Add(layerTerms);
+                    }
+                    finally
+                    {
+                        layerCounter += 1;
+                    }
                 }
 
                 return new PolicyTerms()
                 {
-
-
-                    layer_terms = new List<LayerTerms>()
-                    {
-                        new LayerTerms()
-                        {
-                            name = "Layer 1",
-                            limit = 1000000,
-                            attachment = 0,
-                            premium = 1000000
-                        }
-                    },
-                    peril_terms = new List<PerilTerms>()
-                    {
-                        new PerilTerms()
-                        {
-                            type = "Wind",
-                            subperil_group = "Wind",
-                            sublimit = 1000000,
-                            min_deductible = 0,
-                            max_deductible = 1000000,
-                            deductible_type = "Flat",
-                            per_location_deductible_type = "Flat",
-                            per_location_deductible = 1000000,
-                            bi_days_deductible = 0
-                        }
-                    },
-                    zone_terms = new List<ZoneTerms>()
-                    {
-                        new ZoneTerms()
-                        {
-                            peril_type = "Wind",
-                            zone = "Zone 1",
-                            sublimit = 1000000,
-                            min_deductible = 0,
-                            max_deductible = 1000000,
-                            deductible_type = "Flat",
-                            per_location_deductible_type = "Flat",
-                            per_location_deductible = 1000000,
-                            is_excluded = false
-                        }
-                    },
-
+                    layer_terms = allLayerTerms,
+                    peril_terms = null, //todo
+                    zone_terms = null //todo
                 };
             }
         }
@@ -211,7 +212,7 @@ namespace PingExcelReader
 
         public void WritePingJson(FileInfo outfile)
         {
-            string json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+            string json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
             File.WriteAllText(outfile.FullName, json);
         }
     }

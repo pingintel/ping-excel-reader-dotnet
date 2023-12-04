@@ -212,7 +212,7 @@ namespace PingExcelReader
 
             if (range == null)
             {
-                throw new Exception($"Range {definedName} not found");
+                throw new ArgumentException($"Range {definedName} not found");
             }
 
             var headers = range.Row(1).RowAbove().Cells().Select(c => c.Value.ToString()).ToArray();

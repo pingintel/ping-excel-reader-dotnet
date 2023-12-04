@@ -1,4 +1,6 @@
-﻿using System.IO;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
@@ -27,17 +29,29 @@ namespace pingreader
             var pingData = PingExcelReader.PingExcelReader.Read(infile, loggerFactory);
 
             logger.LogInformation("SOVID: {SOVID}", pingData.id);
-            var information = pingData.extra_data;
-            if (information.TryGetValue("Named Insured", out dynamic? quoteCode))
-                if (quoteCode.HasValue)
-                    logger.LogInformation("Named Insured: {Named Insured}", (string)quoteCode.Value.ToString());
-            logger.LogInformation("Info Count: {Count}", information.Count);
-            // foreach (var item in information)
-            //     Console.WriteLine("{0}: {1}", item.Key, item.Value);
+
+            try
+            {
+                var namedInsured = pingData.extra_data["Named Insured"];
+                string namedInsuredStr = Convert.ToString(namedInsured);
+                logger.LogInformation("Named Insured: {Named Insured}", namedInsuredStr);
+            }
+            catch (KeyNotFoundException)
+            {
+                logger.LogInformation("Named Insured: <not found>");
+            }
+            if (pingData.policy_terms != null)
+            {
+                foreach (var layer in pingData.policy_terms.layer_terms)
+                {
+                    logger.LogInformation("Layer details: {LayerDetails}", layer.ToJson());
+                }
+            }
+
+            logger.LogInformation("ExtraData Count: {Count}", pingData.extra_data.Count);
 
             var buildings = pingData.buildings;
-            string json = JsonSerializer.Serialize(buildings, new JsonSerializerOptions { WriteIndented = true });
-
+            logger.LogInformation("Read Buildings Count: {Count}", buildings.Count);
             pingData.WritePingJson(outfile);
             logger.LogInformation("Wrote {0}", outfile.FullName);
         }
