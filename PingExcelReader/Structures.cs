@@ -14,41 +14,43 @@ using System.Text.Json.Serialization;
 
 namespace PingExcelReader
 {
-
-    public class LayerTerms
+    public class SerializableBase
     {
-        public string name { get; set; }
-        public long? limit { get; set; }
-        public long? attachment { get; set; }
-        public float? participation { get; set; }
-        public long? premium { get; set; }
-
         public string ToJson()
         {
             return JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
         }
     }
 
-    public class PerilTerms
+
+    public class LayerTerms : SerializableBase
     {
-        public string type { get; set; }
-        public string subperil_group { get; set; }
-        public long? sublimit { get; set; }
-        public long? min_deductible { get; set; }
-        public long? max_deductible { get; set; }
-        public string deductible_type { get; set; }
-        public string per_location_deductible_type { get; set; }
-        public float? per_location_deductible { get; set; }
-        public long? bi_days_deductible { get; set; }
+        public string name { get; set; }
+        public decimal? limit { get; set; }
+        public decimal? attachment { get; set; }
+        public decimal? participation_pct { get; set; }
+        public decimal? premium { get; set; }
     }
 
-    public class ZoneTerms
+    public class PerilTerms : SerializableBase
+    {
+        public List<string> subperil_types { get; set; }
+        public decimal? sublimit { get; set; }
+        public decimal? min_deductible { get; set; }
+        public decimal? max_deductible { get; set; }
+        public string deductible_type { get; set; }
+        public string per_location_deductible_type { get; set; }
+        public decimal? per_location_deductible { get; set; }
+        public decimal? bi_days_deductible { get; set; }
+    }
+
+    public class ZoneTerms : SerializableBase
     {
         public string peril_type { get; set; }
         public string zone { get; set; }
-        public long? sublimit { get; set; }
-        public long? min_deductible { get; set; }
-        public long? max_deductible { get; set; }
+        public decimal? sublimit { get; set; }
+        public decimal? min_deductible { get; set; }
+        public decimal? max_deductible { get; set; }
         public string deductible_type { get; set; }
         public string per_location_deductible_type { get; set; }
         public float? per_location_deductible { get; set; }
@@ -56,7 +58,7 @@ namespace PingExcelReader
     }
 
 
-    public class PolicyTerms
+    public class PolicyTerms : SerializableBase
     {
         public string tracking_id { get; set; }
         public string policy_number { get; set; }
@@ -69,14 +71,9 @@ namespace PingExcelReader
         public bool? include_surge_as_sublimit { get; set; }
         public string air_date_format { get; set; }
         public List<LayerTerms> layer_terms { get; set; }
-        public List<PerilTerms> peril_terms { get; set; }
-        public List<ZoneTerms> zone_terms { get; set; }
+        public Dictionary<string, PerilTerms> peril_terms { get; set; }
+        public Dictionary<string, Dictionary<string, ZoneTerms>> zone_terms { get; set; }
         public Dictionary<string, List<string>> following_perils { get; set; }
-
-        public string ToJson()
-        {
-            return JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
-        }
     }
 
     internal class PingExcelMetadata

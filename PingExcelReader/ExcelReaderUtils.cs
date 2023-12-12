@@ -15,6 +15,7 @@ using System.Collections.Generic;
 using ClosedXML;
 using ClosedXML.Excel;
 using Microsoft.Extensions.Logging;
+using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace PingExcelReader
 {
@@ -231,7 +232,29 @@ namespace PingExcelReader
 
         internal dynamic GetCellValue(string cellref)
         {
-            return ToDynamic(this.workbook.Cell(cellref));
+            IXLCell cell = this.workbook.Cell(cellref);
+            logger?.LogDebug("GetCellValue: {cellref} = {value}", cellref, cell?.ToString());
+            if (cell == null) return null;
+            return ToDynamic(cell);
+        }
+
+
+        internal T GetCellValue<T>(string cellref, T defaultValue = default)
+        {
+            // try
+            // {
+            IXLCell cell = this.workbook.Cell(cellref);
+            if (cell == null) return defaultValue;
+            if (cell.IsEmpty()) return defaultValue;
+            T value;
+            if (cell.TryConvertValue(cell.CachedValue, out value))
+            {
+                return value;
+            }
+            else
+            {
+                throw new Exception($"Unable to convert cell value {cell.CachedValue} to {typeof(T)}");
+            }
         }
 
         internal string GetCustomDocumentPropertyOrDefault(string propertyName, string defaultValue)
@@ -251,5 +274,6 @@ namespace PingExcelReader
         {
             return this.workbook.NamedRange(definedName) != null;
         }
+
     }
 }

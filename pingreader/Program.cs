@@ -14,14 +14,16 @@ namespace pingreader
             {
                 outfile = new FileInfo(infile.FullName + ".output.json");
             }
-            using ILoggerFactory loggerFactory =
-                LoggerFactory.Create(builder =>
-                    builder.AddSimpleConsole(options =>
-                    {
-                        options.IncludeScopes = true;
-                        options.SingleLine = true;
-                        options.TimestampFormat = "HH:mm:ss ";
-                    }));
+            using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.SetMinimumLevel(LogLevel.Debug);
+                builder.AddSimpleConsole(options =>
+                {
+                    options.IncludeScopes = true;
+                    options.SingleLine = true;
+                    options.TimestampFormat = "HH:mm:ss ";
+                });
+            });
 
             ILogger logger = loggerFactory.CreateLogger("pingreader");
             logger.LogInformation("pingreader: Processing {infile}", infile.FullName);
@@ -46,14 +48,25 @@ namespace pingreader
                 {
                     logger.LogInformation("Layer details: {LayerDetails}", layer.ToJson());
                 }
+                foreach (var peril in pingData.policy_terms.peril_terms)
+                {
+                    logger.LogInformation("Peril {Key}: {Details}", peril.Key, peril.Value.ToJson());
+                }
+                foreach (var zoneGroup in pingData.policy_terms.zone_terms)
+                {
+                    foreach (var zone in zoneGroup.Value)
+                    {
+                        logger.LogInformation("Zone {GroupKey}-{Key}: {ZoneDetails}", zoneGroup.Key, zone.Key, zone.Value.ToJson());
+                    }
+                }
+
+                logger.LogInformation("ExtraData Count: {Count}", pingData.extra_data.Count);
+
+                var buildings = pingData.buildings;
+                logger.LogInformation("Read Buildings Count: {Count}", buildings.Count);
+                pingData.WritePingJson(outfile);
+                logger.LogInformation("Wrote {0}", outfile.FullName);
             }
-
-            logger.LogInformation("ExtraData Count: {Count}", pingData.extra_data.Count);
-
-            var buildings = pingData.buildings;
-            logger.LogInformation("Read Buildings Count: {Count}", buildings.Count);
-            pingData.WritePingJson(outfile);
-            logger.LogInformation("Wrote {0}", outfile.FullName);
         }
     }
 }
