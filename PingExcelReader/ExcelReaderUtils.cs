@@ -247,7 +247,7 @@ namespace PingExcelReader
             if (cell == null) return defaultValue;
             if (cell.IsEmpty()) return defaultValue;
             T value;
-            if (cell.TryConvertValue(cell.CachedValue, out value))
+            if (cell.TryGetCachedValue(out value))
             {
                 return value;
             }
