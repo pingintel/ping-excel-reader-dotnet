@@ -22,13 +22,19 @@ namespace PingExcelReader
         }
     }
 
+    public class PercentOrAmount : SerializableBase
+    {
+        public decimal? percent { get; set; }
+        public decimal? amount { get; set; }
+    }
+
 
     public class LayerTerms : SerializableBase
     {
         public string name { get; set; }
         public decimal? limit { get; set; }
         public decimal? attachment { get; set; }
-        public decimal? participation_pct { get; set; }
+        public PercentOrAmount participation { get; set; }
         public decimal? premium { get; set; }
     }
 
@@ -38,42 +44,53 @@ namespace PingExcelReader
         public decimal? sublimit { get; set; }
         public decimal? min_deductible { get; set; }
         public decimal? max_deductible { get; set; }
-        public string deductible_type { get; set; }
-        public string per_location_deductible_type { get; set; }
-        public decimal? per_location_deductible { get; set; }
+        public string location_deductible_type { get; set; }
+        public decimal? location_deductible { get; set; }
         public decimal? bi_days_deductible { get; set; }
     }
 
-    public class ZoneTerms : SerializableBase
+    public class PerZoneTerms : SerializableBase
     {
         public string peril_type { get; set; }
         public string zone { get; set; }
         public decimal? sublimit { get; set; }
         public decimal? min_deductible { get; set; }
         public decimal? max_deductible { get; set; }
-        public string deductible_type { get; set; }
-        public string per_location_deductible_type { get; set; }
-        public float? per_location_deductible { get; set; }
+        public string location_deductible_type { get; set; }
+        public decimal? location_deductible { get; set; }
         public bool? is_excluded { get; set; }
+
+        private bool IsDecimalSet(decimal? value)
+        {
+            return value.HasValue && value.Value != 0;
+        }
+
+        internal bool IsApplicable()
+        {
+            if (this.sublimit.HasValue
+                || IsDecimalSet(this.location_deductible)
+                || IsDecimalSet(this.min_deductible)
+                || IsDecimalSet(this.max_deductible)
+                || (this.is_excluded.HasValue && this.is_excluded.Value))
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
     }
 
 
     public class PolicyTerms : SerializableBase
     {
-        public string tracking_id { get; set; }
-        public string policy_number { get; set; }
-        public string insured_name { get; set; }
-        public DateOnly? inception_date { get; set; }
-        public DateOnly? expiration_date { get; set; }
-        public string underwriter { get; set; }
-        public string line_of_business { get; set; }
-        public string currency { get; set; }
-        public bool? include_surge_as_sublimit { get; set; }
-        public string air_date_format { get; set; }
         public List<LayerTerms> layer_terms { get; set; }
         public Dictionary<string, PerilTerms> peril_terms { get; set; }
-        public Dictionary<string, Dictionary<string, ZoneTerms>> zone_terms { get; set; }
-        public Dictionary<string, List<string>> following_perils { get; set; }
+        public Dictionary<string, Dictionary<string, PerZoneTerms>> zone_terms { get; set; }
+        public List<string> excluded_subperil_types;
+        public string notes;
+
     }
 
     internal class PingExcelMetadata
@@ -96,4 +113,29 @@ namespace PingExcelReader
         public object PingFormatName;
         // public string UserInfo;
     }
+
+    internal class ZoneGroupSettings
+    {
+        public string caption { get; set; }
+        public string peril_class { get; set; }
+        public List<ZoneSettings> zones { get; set; }
+
+        public string GetVbaName()
+        {
+            return peril_class ?? caption;
+        }
+
+    }
+
+    internal class ZoneSettings
+    {
+        public string caption { get; set; }
+        public string zone { get; set; }
+
+        public string GetVbaName()
+        {
+            return zone;
+        }
+    }
+
 }

@@ -16,6 +16,7 @@ using ClosedXML;
 using ClosedXML.Excel;
 using Microsoft.Extensions.Logging;
 using DocumentFormat.OpenXml.Wordprocessing;
+using System.Text.RegularExpressions;
 
 namespace PingExcelReader
 {
@@ -228,6 +229,20 @@ namespace PingExcelReader
                 table.Add(dict);
             }
             return table;
+        }
+
+        internal IEnumerable<Tuple<string, Match>> GetNamedRangesMatchingRegex(string regex)
+        {
+            var ret = new List<string>();
+            foreach (var namedRange in this.workbook.NamedRanges)
+            {
+                var m = Regex.Match(namedRange.Name, regex);
+                if (m.Success)
+                {
+                    yield return Tuple.Create(namedRange.Name, m);
+                }
+
+            }
         }
 
         internal dynamic GetCellValue(string cellref)

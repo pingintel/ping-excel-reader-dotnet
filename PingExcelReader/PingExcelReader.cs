@@ -70,7 +70,7 @@ namespace PingExcelReader
                 {
                     try
                     {
-                        string name = row["Label"];
+                        string name = row["Attribute"];
                         string cellref = row["Excel Defined Name"];
                         var cellValue = reader.GetCellValue(cellref);
                         if (string.IsNullOrEmpty(cellValue)) continue;
@@ -144,11 +144,14 @@ namespace PingExcelReader
 
                     var pingFormatName = Metadata.PingFormatName;
 
+                    var rpt = ReadPerilTerms();
                     m_policy_terms = new PolicyTerms()
                     {
                         layer_terms = ReadLayerTerms(),
-                        peril_terms = ReadPerilTerms(),
-                        zone_terms = new Dictionary<string, Dictionary<string, ZoneTerms>>()
+                        peril_terms = rpt.Item1,
+                        zone_terms = ReadZoneTerms(),
+                        excluded_subperil_types = rpt.Item2,
+                        notes = reader.GetCellValue<string>("p_Contract_Notes", null),
                     };
                 }
                 return m_policy_terms;
@@ -159,6 +162,7 @@ namespace PingExcelReader
         {
             var allLayerTerms = new List<LayerTerms>();
             int layerCounter = 0;
+            var TotalTIVLimit = reader.GetCellValue<decimal?>("TotalTIVLimit", null);
             while (layerCounter < 1000)
             {
                 layerCounter += 1;
@@ -169,40 +173,35 @@ namespace PingExcelReader
                     break;
                 }
 
-                decimal? participation;
-                try
+                var limit = reader.GetCellValue<decimal?>($"p_L{layerCounter}LL");
+                if (!limit.HasValue)
+                    limit = TotalTIVLimit ?? 0;
+
+                var name = reader.GetCellValue<string>($"p_L{layerCounter}Name") ?? layerCounter.ToString();
+                var attachment = reader.GetCellValue<decimal?>($"p_L{layerCounter}AP") ?? 0;
+                var participation_pct = reader.GetCellValue<decimal?>($"p_L{layerCounter}PP") ?? (decimal)1.0;
+                var participation_amt = (decimal?)null;
+                // reader.GetCellValue<decimal?>($"p_L{layerCounter}PL");
+                var calculated_participation_amt = participation_amt ?? (limit.HasValue ? limit.Value : TotalTIVLimit - Math.Max(0, attachment)) * participation_pct;
+
+                if (!calculated_participation_amt.HasValue || calculated_participation_amt == 0)
                 {
-                    participation = reader.GetCellValue<decimal?>($"p_L{layerCounter}PL");
-                    if (participation == null || participation == 0)
-                    {
-                        m_logger?.LogDebug("Skipping layer {layerCounter}, participation is {dsa}", layerCounter, (string)reader.GetCellValue($"p_L{layerCounter}PL").ToString());
-                        continue;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    m_logger?.LogWarning(ex, "Skipping layer {layerCounter}, participation invalid", layerCounter);
+                    m_logger?.LogWarning("Skipping layer {layerCounter}, participation empty", layerCounter);
                     continue;
                 }
 
-                var layerTerms = new LayerTerms();
-                layerTerms.participation_pct = participation ?? 0;
-                layerTerms.attachment = reader.GetCellValue<decimal?>($"p_L{layerCounter}AP") ?? 0;
-                var limit = reader.GetCellValue($"p_L{layerCounter}LL");
-                // decide if limit (which is dynamic) is set or not
-                if (limit != null && limit >= 0)
+                var layerTerms = new LayerTerms()
                 {
-                    layerTerms.limit = Convert.ToInt64(limit);
-                }
-                else
-                {
-                    var participation_pct = reader.GetCellValue($"p_L{layerCounter}PP");
-                    if (participation_pct == null)
-                        participation_pct = 1.0;
-                    else
-                        participation_pct = Convert.ToDouble(participation_pct);
-                    layerTerms.limit = (decimal?)Math.Round(Convert.ToDouble(layerTerms.participation_pct) / participation_pct);
-                }
+                    name = name,
+                    limit = limit,
+                    attachment = attachment,
+                    participation = new PercentOrAmount()
+                    {
+                        percent = participation_pct,
+                        amount = participation_amt
+                    },
+                    premium = reader.GetCellValue<decimal?>($"p_L{layerCounter}PR"),
+                };
 
                 m_logger?.LogDebug("Layer {layerCounter} details: {layerTerms}", layerCounter, layerTerms.ToJson());
                 allLayerTerms.Add(layerTerms);
@@ -210,65 +209,168 @@ namespace PingExcelReader
 
             return allLayerTerms;
         }
-
-        private Dictionary<string, PerilTerms> ReadPerilTerms()
+        private Dictionary<string, string> GetLegacyVBAPerilNames()
         {
             // provide a constant with all standard possible perils
-            var perilSettings = new Dictionary<string, string>();
-            perilSettings.Add("Shake", "EQ_Shake");
-            perilSettings.Add("FF", "EQ_Fire");
-            perilSettings.Add("SL", "EQ_Sprinkler");
-            perilSettings.Add("Landslide", "EQ_Landslide");
-            perilSettings.Add("Liquefaction", "EQ_Liquefaction");
-            perilSettings.Add("Tsunami", "EQ_Tsunami");
-            perilSettings.Add("Wind", "HU_Wind");
-            perilSettings.Add("SS", "HU_Surge");
-            perilSettings.Add("PF", "HU_PrecipitationFlood");
-            perilSettings.Add("WS", "WinterStorm");
-            perilSettings.Add("ST", "SevereConvectiveStorm");
-            perilSettings.Add("STX", "SevereStorm");
-            perilSettings.Add("SW", "StraightLineWind");
-            perilSettings.Add("HL", "Hail");
-            perilSettings.Add("TD", "Tornado");
-            perilSettings.Add("IF", "InlandFlood");
-            perilSettings.Add("Wildfire", "Wildfire");
-            perilSettings.Add("Terrorism", "Terrorism");
-            perilSettings.Add("NonCat", "NonCat");
+            var legacyPerilVBAAbbreviations = new Dictionary<string, string>();
+            legacyPerilVBAAbbreviations.Add("Shake", "EQ_Shake");
+            legacyPerilVBAAbbreviations.Add("FF", "EQ_Fire");
+            legacyPerilVBAAbbreviations.Add("SL", "EQ_Sprinkler");
+            legacyPerilVBAAbbreviations.Add("Landslide", "EQ_Landslide");
+            legacyPerilVBAAbbreviations.Add("Liquefaction", "EQ_Liquefaction");
+            legacyPerilVBAAbbreviations.Add("Tsunami", "EQ_Tsunami");
+            legacyPerilVBAAbbreviations.Add("Wind", "HU_Wind");
+            legacyPerilVBAAbbreviations.Add("SS", "HU_Surge");
+            legacyPerilVBAAbbreviations.Add("PF", "HU_PrecipitationFlood");
+            legacyPerilVBAAbbreviations.Add("WS", "WinterStorm");
+            legacyPerilVBAAbbreviations.Add("ST", "SevereConvectiveStorm");
+            legacyPerilVBAAbbreviations.Add("STX", "SevereStorm");
+            legacyPerilVBAAbbreviations.Add("SW", "StraightLineWind");
+            legacyPerilVBAAbbreviations.Add("HL", "Hail");
+            legacyPerilVBAAbbreviations.Add("TD", "Tornado");
+            legacyPerilVBAAbbreviations.Add("IF", "InlandFlood");
+            return legacyPerilVBAAbbreviations;
+        }
+
+        private Tuple<Dictionary<string, PerilTerms>, List<string>> ReadPerilTerms()
+        {
+            // var perilSettings = ReadPerilSettings();
+            var perilsDefinedNames = reader.GetNamedRangesMatchingRegex(@"p_(?<peril>[a-zA-Z]+)_Caption");
 
             var perilGroups = new Dictionary<string, PerilTerms>();
+            var excludedPerils = new List<string>();
+            var legacyNames = GetLegacyVBAPerilNames();
 
-            foreach (var name in perilSettings.Keys)
+            foreach (var perilMatch in perilsDefinedNames)
             {
-                if (!reader.HasNamedRange($"p_{name}_Group"))
+                var vbaName = perilMatch.Item2.Groups["peril"].Value;
+                var pingConstant = legacyNames.GetValueOrDefault(vbaName, vbaName);
+
+                if (!reader.HasNamedRange($"p_{vbaName}_Group"))
                     continue;
 
-                string group = Convert.ToString(reader.GetCellValue($"p_{name}_Group"));
+                string group = Convert.ToString(reader.GetCellValue($"p_{vbaName}_Group"));
                 if (string.IsNullOrWhiteSpace(group) || group == "Exclude")
+                {
+                    excludedPerils.Add(vbaName);
                     continue;
+                }
 
+                PerilTerms pg;
                 if (perilGroups.ContainsKey(group))
                 {
-                    perilGroups[group].subperil_types.Add(perilSettings[name]);
+                    pg = perilGroups[group];
+                    perilGroups[group].subperil_types.Add(pingConstant);
+
                 }
                 else
                 {
-                    var sl = reader.GetCellValue<decimal?>($"p_{name}Sublimit", null) ?? reader.GetCellValue<decimal?>($"p_{name}SubLimit", null);
-                    perilGroups.Add(group, new PerilTerms()
+                    pg = new PerilTerms()
                     {
-                        subperil_types = new List<string> { perilSettings[name] },
-                        sublimit = sl,
-                        min_deductible = reader.GetCellValue<decimal?>($"p_{name}Ded", 0),
-                        max_deductible = reader.GetCellValue<decimal?>($"p_{name}MaxDed", 0),
-                        per_location_deductible = reader.GetCellValue<decimal?>($"p_{name}PerLocDed", null),
-                        per_location_deductible_type = reader.GetCellValue<string>($"p_{name}PerLocDedType", null),
-                        bi_days_deductible = reader.GetCellValue<decimal?>($"p_{name}BIDed", null)
-                    });
+                        subperil_types = new List<string> { pingConstant },
+                    };
+                    perilGroups.Add(group, pg);
+                }
 
+                var sl = reader.GetCellValue<decimal?>($"p_{vbaName}Sublimit", null) ?? reader.GetCellValue<decimal?>($"p_{vbaName}SubLimit", null);
+                var min_deductible = reader.GetCellValue<decimal?>($"p_{vbaName}Ded", null);
+                var max_deductible = reader.GetCellValue<decimal?>($"p_{vbaName}MaxDed", null);
+                var location_deductible = reader.GetCellValue<decimal?>($"p_{vbaName}PerLocDed", null);
+                var location_deductible_type = reader.GetCellValue<string>($"p_{vbaName}PerLocDedType", null);
+                var bi_days_deductible = reader.GetCellValue<decimal?>($"p_{vbaName}BIDed", null);
+
+                if (sl.HasValue)
+                    pg.sublimit = sl;
+                if (min_deductible.HasValue)
+                    pg.min_deductible = min_deductible;
+                if (max_deductible.HasValue)
+                    pg.max_deductible = max_deductible;
+                if (location_deductible.HasValue)
+                    pg.location_deductible = location_deductible;
+                if (!string.IsNullOrWhiteSpace(location_deductible_type))
+                    pg.location_deductible_type = location_deductible_type;
+                if (bi_days_deductible.HasValue)
+                    pg.bi_days_deductible = bi_days_deductible;
+            };
+
+            return new Tuple<Dictionary<string, PerilTerms>, List<string>>(perilGroups, excludedPerils);
+        }
+
+
+        private List<ZoneGroupSettings> ReadZoneGroupsSettings()
+        {
+            // provide a constant with all standard possible perils
+            var zoneGroupDefinedNames = reader.GetNamedRangesMatchingRegex(@"p_(?<group>[a-zA-Z]+)_(?<zone>[a-zA-Z]+)_Caption");
+            var zoneGroups = new Dictionary<string, ZoneGroupSettings>();
+            foreach (var zoneGroupDefinedName in zoneGroupDefinedNames)
+            {
+                var zone_group_vba = zoneGroupDefinedName.Item2.Groups["group"].Value;
+                var zone_vba = zoneGroupDefinedName.Item2.Groups["zone"].Value;
+                var ded_prefix = $"{zone_group_vba}_{zone_vba}_";
+
+                ZoneGroupSettings zoneGroup;
+                if (!zoneGroups.ContainsKey(zone_group_vba))
+                {
+                    zoneGroup = new ZoneGroupSettings()
+                    {
+                        peril_class = zone_group_vba,
+                        zones = new List<ZoneSettings>()
+                    };
+                    zoneGroups.Add(zone_group_vba, zoneGroup);
+                }
+                else
+                {
+                    zoneGroup = zoneGroups[zone_group_vba];
+                }
+
+                var zoneSettings = new ZoneSettings()
+                {
+                    zone = zone_vba,
+                    caption = reader.GetCellValue<string>($"p_{ded_prefix}Caption", null)
+                };
+
+                zoneGroup.zones.Add(zoneSettings);
+            }
+
+            return zoneGroups.Values.ToList();
+        }
+
+        private Dictionary<string, Dictionary<string, PerZoneTerms>> ReadZoneTerms()
+        {
+            var perZoneTerms = new Dictionary<string, Dictionary<string, PerZoneTerms>>();
+            var zoneGroupSettings = ReadZoneGroupsSettings();
+            foreach (ZoneGroupSettings zoneGroup in zoneGroupSettings)
+            {
+                foreach (var zoneSettings in zoneGroup.zones)
+                {
+                    var dedPrefix = $"{zoneGroup.GetVbaName()}_{zoneSettings.GetVbaName()}_";
+                    var perZoneTerm = new PerZoneTerms()
+                    {
+                        sublimit = reader.GetCellValue<decimal?>($"p_{dedPrefix}Sublimit", null),
+                        min_deductible = reader.GetCellValue<decimal?>($"p_{dedPrefix}Ded", null),
+                        max_deductible = reader.GetCellValue<decimal?>($"p_{dedPrefix}MaxDed", null),
+                        location_deductible = reader.GetCellValue<decimal?>($"p_{dedPrefix}PerLocDed", null),
+                        location_deductible_type = reader.GetCellValue<string>($"p_{dedPrefix}PerLocDedType", null),
+                        is_excluded = reader.GetCellValue<string>($"p_{dedPrefix}Include", "") == "Exclude",
+                    };
+
+                    if (!perZoneTerm.IsApplicable())
+                        continue;
+
+                    if (!perZoneTerms.ContainsKey(zoneGroup.peril_class))
+                        perZoneTerms[zoneGroup.peril_class] = new Dictionary<string, PerZoneTerms>();
+
+                    var zoneName = zoneSettings.GetVbaName();
+                    if (zoneSettings.zone.StartsWith("Custom"))
+                        zoneName = reader.GetCellValue<string>($"p_{dedPrefix}Caption", null);
+
+                    perZoneTerms[zoneGroup.peril_class][zoneName] = perZoneTerm;
                 }
             }
 
-            return perilGroups;
+            return perZoneTerms;
         }
+
 
         private List<Dictionary<string, dynamic>> m_buildings = null;
 
