@@ -24,7 +24,8 @@ namespace PingExcelReader
             return new PingExcelReader()
             {
                 m_infile = infile,
-                m_logger = loggerFactory?.CreateLogger("PingExcelReader")
+                m_logger = loggerFactory?.CreateLogger("PingExcelReader"),
+                m_TableName = "Locations"
             };
         }
 
@@ -32,6 +33,9 @@ namespace PingExcelReader
 
         private FileInfo m_infile;
         private ExcelReader m_reader;
+
+        private string m_TableName;
+        public string TableName { get { return m_TableName; } }
 
         private ExcelReader reader
         {
@@ -83,6 +87,36 @@ namespace PingExcelReader
                 }
 
                 return ret;
+            }
+        }
+
+        public Dictionary<string, string> subclass_mapping
+        {
+            get
+            {
+                var columnSpecs = this.reader.ReadReferenceTable($"r_{this.TableName}_column_specification");
+
+                var dict = new Dictionary<string, string>();
+                foreach (var spec in columnSpecs)
+                {
+                    var col = spec["Col"];
+                    var attribute = spec["Attribute"];
+                    var props = spec["Props"].Split(new char[] { ',' });
+
+                    if (string.IsNullOrWhiteSpace(attribute)) continue;
+
+                    var colLetter = col.Split(new char[] { '!' }).Last();
+
+                    if (!reader.HasNamedRange($"r_{this.TableName}_subclass_{colLetter}")) continue;
+
+                    var parts = attribute.Split(new char[] { '[' }, 2);
+                    if (parts.Length > 1)
+                    {
+                        attribute = parts[1].Substring(0, parts[1].Length - 1);
+                    }
+                    dict[attribute] = reader.GetCellValue($"r_{this.TableName}_subclass_{colLetter}");
+                }
+                return dict;
             }
         }
 
@@ -371,7 +405,6 @@ namespace PingExcelReader
             return perZoneTerms;
         }
 
-
         private List<Dictionary<string, dynamic>> m_buildings = null;
 
         public List<Dictionary<string, dynamic>> buildings
@@ -379,7 +412,7 @@ namespace PingExcelReader
             get
             {
                 if (m_buildings == null)
-                    m_buildings = reader.ReadItemsTable("Locations");
+                    m_buildings = reader.ReadItemsTable(this.TableName);
                 return m_buildings;
             }
         }
