@@ -67,6 +67,7 @@ namespace pingreader
                 pingData.WritePingJson(outfile);
                 logger.LogInformation("Wrote {0}", outfile.FullName);
             }
+            logger.LogInformation("AIR Job Id: {0}", pingData.air_job_id);
         }
     }
 }

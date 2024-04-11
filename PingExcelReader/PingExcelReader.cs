@@ -416,6 +416,22 @@ namespace PingExcelReader
                 return m_buildings;
             }
         }
+		
+		public int? air_job_id
+        {
+            get
+            {
+                try
+                {
+                    return reader.GetCellValue<int?>("AirJobId", null);
+                }
+                catch (Exception ex)
+                {
+                    m_logger?.LogWarning(ex, "Error reading AirJobId cell.");
+                    return null;
+                }
+            }
+        }
 
         public void WritePingJson(FileInfo outfile)
         {
