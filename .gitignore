@@ -3,3 +3,4 @@ UpgradeLog.htm
 .vscode/
 bin/
 obj/
+.DS_Store
